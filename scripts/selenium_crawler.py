@@ -2,12 +2,13 @@ import json
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.action_chains import ActionChains  # ActionChains 임포트 추가
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from konlpy.tag import Okt
+import time
+from datetime import datetime
 
+# Chrome 드라이버 경로
 chrome_driver_path = r"C:\Program Files\chromedriver-win64\chromedriver.exe"
 service = ChromeService(executable_path=chrome_driver_path)
 
@@ -21,84 +22,76 @@ chrome_options.add_argument("--profile-directory=Default")
 driver = webdriver.Chrome(service=service, options=chrome_options)
 
 # 노션 페이지 URL
-notion_page_url = "https://www.notion.so/kongukjae/RockCoders-de66453690144c53a0dc9d065a43e5f0"
+notion_page_url = "https://www.notion.so/64fa68fc31464a6e95570b77403cb0d1?v=a38b4aba61904e519bdad3f703777e94"
 driver.get(notion_page_url)
 
 # 페이지 로딩 대기
 wait = WebDriverWait(driver, 20)
-okt = Okt()  # Okt 객체 생성
+wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#notion-app")))
 
-def get_parent_element():
-    parent_selector = "#notion-app > div > div:nth-child(1) > div > div:nth-child(2) > main > div > div > div:nth-child(5) > div > div > div > div:nth-child(3) > div:nth-child(3)"
-    return wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, parent_selector)))
+# 페이지 로드 후 대기 (5초)
+time.sleep(5)
 
-def get_child_elements(parent_element):
-    child_selector = "div > div.notion-table-view-row > div > div:nth-child(3) > div > div"
-    return parent_element.find_elements(By.CSS_SELECTOR, child_selector)
+# 제외할 단어 목록
+excluded_words = {
+    "시작 전", "계산", "새로 만들기", "즐겨찾기", "개인 페이지",
+    "5시간 전 편집", "모든 페이지", "7시간 전 편집", "혼자 공부하는데 데이터 분석 with 파이썬", "댓글의 코드",
+    "TOP 관리", "노드 및 NPM 설치 (1)", "규칙 설정 방법 및 규칙 설정 (1)", "7.11 작업중 모르는 것", "크롤링 test 파일",
+    "서버 업데이트 서버 관리 (1)", "SSH 접속을 위한 PuTTY 설치 (1)", "ACL 비활성화 활성화 차이가 뭐지? (1)", "8시간 전 편집",
+    "각 서버 실행 (1)", "바벨", "표기법 코드","혼자 공부하는데이터 분석 with 파이썬"
+}
 
-# URL 수집하기
-collected_urls = []
-parent_element = get_parent_element()
-child_elements = get_child_elements(parent_element)
+# 데이터 가져오기
+collected_data = set()  # 중복을 제거하기 위해 집합 사용
+scrollable_div = driver.find_element(By.CSS_SELECTOR, "#notion-app > div > div:nth-child(1) > div > div:nth-child(2) > main > div > div")
 
-for index in range(len(child_elements)):
+previous_height = driver.execute_script("return arguments[0].scrollHeight", scrollable_div)
+
+# 스크롤을 통해 화면에 보이는 데이터 가져오기
+while True:
     try:
-        child = child_elements[index]
-        
-        actions = ActionChains(driver)
-        actions.move_to_element(child).perform()
-        
-        open_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[role='button'][aria-label='페이지로 열기']")))
-        open_button.click()
-        
-        wait.until(EC.url_changes(notion_page_url))
-        
-        current_url = driver.current_url
-        collected_urls.append(current_url)
-        print(f"수집한 URL (요소 {index + 1}):", current_url)
-        
-        driver.back()
-        parent_element = get_parent_element()
-        child_elements = get_child_elements(parent_element)
-        
-        child = child_elements[index]
+        # 현재 보이는 영역에서 span 태그 선택
+        visible_elements = driver.find_elements(By.CSS_SELECTOR, "span")
+
+        # 데이터 출력, 빈 값 및 제외할 단어 필터링
+        for element in visible_elements:
+            text = element.text.strip()
+            if text and text not in excluded_words:  # 빈 값 및 제외할 단어가 아닐 경우
+                collected_data.add(text)  # 집합에 추가
+
+        # 스크롤 내리기
+        driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", scrollable_div)
+        time.sleep(3)  # 페이지가 로드될 시간을 기다림
+
+        # 새로운 높이를 가져와서 이전 높이와 비교
+        new_height = driver.execute_script("return arguments[0].scrollHeight", scrollable_div)
+        if new_height == previous_height:  # 더 이상 스크롤할 수 없으면 종료
+            break
+        previous_height = new_height
 
     except Exception as e:
-        print(f"오류 발생 (요소 {index + 1}):", e)
+        print("Error while fetching elements:", e)
+        break
 
-# 수집한 URL로 이동하여 데이터 추출하고 JSON으로 저장하기
-data_collection = []  # 데이터를 저장할 리스트
+# 날짜를 월과 일로 추출하는 함수
+def extract_month_day(text):
+    parts = text.split(" ")
+    for part in parts:
+        try:
+            date_obj = datetime.strptime(part[:10], "%Y-%m-%d")
+            return (date_obj.month, date_obj.day)  # 월, 일을 튜플로 반환
+        except ValueError:
+            continue
+    return (0, 0)  # 날짜가 없으면 (0, 0) 반환
 
-for url in collected_urls:
-    try:
-        driver.get(url)
-        
-        # main 태그가 로드될 때까지 대기
-        wait.until(EC.presence_of_element_located((By.TAG_NAME, "main")))  
-        
-        # main 태그 내 모든 데이터 가져오기
-        main_element = driver.find_element(By.TAG_NAME, "main")
-        all_data = main_element.text  # 모든 텍스트 가져오기
-        
-        # Okt를 사용하여 형태소 분석
-        tokens = okt.morphs(all_data)  # 형태소로 분리
-        
-        # 데이터 구조화
-        data_collection.append({
-            "url": url,
-            "data": all_data,
-            "tokens": tokens  # 형태소 리스트 추가
-        })
-        
-        print(f"{url}에서 추출한 데이터:\n", all_data)
-        print(f"{url}의 형태소:\n", tokens)  # 형태소 출력
-        
-    except Exception as e:
-        print(f"{url}에서 데이터 추출 중 오류 발생:", e)
+# 월, 일 순서로 정렬
+sorted_data = sorted(collected_data, key=extract_month_day)
 
 # JSON 파일로 저장
-with open("collected_data.json", "w", encoding="utf-8") as json_file:
-    json.dump(data_collection, json_file, ensure_ascii=False, indent=4)
+with open("name.json", "w", encoding="utf-8") as json_file:
+    json.dump(sorted_data, json_file, ensure_ascii=False, indent=4)
 
 # 브라우저 닫기
 driver.quit()
+
+print("데이터가 name.json 파일에 저장되었습니다.")
