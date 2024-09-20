@@ -38,7 +38,7 @@ excluded_words = {
     "5시간 전 편집", "모든 페이지", "7시간 전 편집", "혼자 공부하는데 데이터 분석 with 파이썬", "댓글의 코드",
     "TOP 관리", "노드 및 NPM 설치 (1)", "규칙 설정 방법 및 규칙 설정 (1)", "7.11 작업중 모르는 것", "크롤링 test 파일",
     "서버 업데이트 서버 관리 (1)", "SSH 접속을 위한 PuTTY 설치 (1)", "ACL 비활성화 활성화 차이가 뭐지? (1)", "8시간 전 편집",
-    "각 서버 실행 (1)", "바벨", "표기법 코드","혼자 공부하는데이터 분석 with 파이썬"
+    "각 서버 실행 (1)", "바벨", "표기법 코드", "혼자 공부하는데이터 분석 with 파이썬"
 }
 
 # 데이터 가져오기
@@ -56,7 +56,7 @@ while True:
         # 데이터 출력, 빈 값 및 제외할 단어 필터링
         for element in visible_elements:
             text = element.text.strip()
-            if text and text not in excluded_words:  # 빈 값 및 제외할 단어가 아닐 경우
+            if text and text not in excluded_words and "편집" not in text:  # "편집"이 없는 경우만 추가
                 collected_data.add(text)  # 집합에 추가
 
         # 스크롤 내리기
